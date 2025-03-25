@@ -29,18 +29,38 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {SIG_VALIDATION_FAILED, SIG_VALIDATION_SUCCESS} from "lib/account-abstraction/contracts/core/Helpers.sol";
-contract MinimalAccount is IAccount, Ownable {
-    error MinimalAccount__NotFromEntryPoint();
 
+contract MinimalAccount is IAccount, Ownable {
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+    error MinimalAccount__NotFromEntryPoint();
+    error MinimalAccount__NotFromEntryPointOrOwner();
+    error MinimalAccount__CallFailed(bytes);
+    /*//////////////////////////////////////////////////////////////
+                             STATE VARIABLES
+    //////////////////////////////////////////////////////////////*/
     IEntryPoint private immutable i_entryPoint;
 
+    /*//////////////////////////////////////////////////////////////
+                                MODIFIERS
+    //////////////////////////////////////////////////////////////*/
     modifier requireFromEntryPoint() {
-        if(msg.sender != address(i_entryPoint)) {
+        if (msg.sender != address(i_entryPoint)) {
             revert MinimalAccount__NotFromEntryPoint();
         }
         _;
     }
 
+    modifier requireFromEntryPointOrOwner() {
+        if (msg.sender != address(i_entryPoint) && msg.sender != owner()) {
+            revert MinimalAccount__NotFromEntryPointOrOwner();
+        }
+        _;
+    }
+    /*//////////////////////////////////////////////////////////////
+                              CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
     constructor(address entryPoint) Ownable(msg.sender) {
         i_entryPoint = IEntryPoint(entryPoint);
     }
@@ -50,6 +70,18 @@ contract MinimalAccount is IAccount, Ownable {
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    
+    function execute(
+        address dest,
+        uint256 value,
+        bytes calldata functionData
+    ) external requireFromEntryPointOrOwner {
+        (bool success,bytes memory result ) = dest.call{value: value}(functionData);
+        if (!success) {
+            revert MinimalAccount__CallFailed(result);
+        }
+    }
+
     function validateUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash,
@@ -62,6 +94,7 @@ contract MinimalAccount is IAccount, Ownable {
                            INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
     // EIP-191 version of the signed hash
+
     function _validateSignature(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash
@@ -75,6 +108,7 @@ contract MinimalAccount is IAccount, Ownable {
         }
         return SIG_VALIDATION_SUCCESS;
     }
+
     function _payPrefund(uint256 missingAccountFunds) internal {
         if (missingAccountFunds != 0) {
             (bool success, ) = payable(msg.sender).call{
@@ -87,6 +121,7 @@ contract MinimalAccount is IAccount, Ownable {
     /*//////////////////////////////////////////////////////////////
                                  GETTERS
     //////////////////////////////////////////////////////////////*/
+
     function getEntryPoint() external view returns (address) {
         return address(i_entryPoint);
     }
