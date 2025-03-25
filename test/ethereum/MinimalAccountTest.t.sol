@@ -13,6 +13,7 @@ contract MinimalAccountTest is Test {
     ERC20Mock usdc;
     uint256 public constant AMOUNT = 1e18;
     address randomUser = makeAddr("randomUser");
+
     function setUp() public {
         DeployMinimal deployMinimal = new DeployMinimal();
         (helperConfig, minimalAccount) = deployMinimal.deployMinimalAccount();
