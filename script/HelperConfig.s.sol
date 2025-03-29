@@ -40,11 +40,11 @@ contract HelperConfig is Script {
         }
     }
 
-    function getEthSepoliaConfig() public returns (NetworkConfig memory) {
+    function getEthSepoliaConfig() public pure returns (NetworkConfig memory) {
         return NetworkConfig({entryPoint: 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789, account: BURNER_WALLET});
     }
 
-    function getZkSyncSepoliaConfig() public returns (NetworkConfig memory) {
+    function getZkSyncSepoliaConfig() public pure returns (NetworkConfig memory) {
         return NetworkConfig({entryPoint: address(0), account: BURNER_WALLET});
     }
 

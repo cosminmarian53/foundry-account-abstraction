@@ -6,6 +6,8 @@ import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {MinimalAccount} from "src/ethereum/MinimalAccount.sol";
 
 contract SendPackedUserOp is Script {
     using MessageHashUtils for bytes32;
@@ -16,43 +18,30 @@ contract SendPackedUserOp is Script {
         address dest = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831; // Arbitrum mainnet USDC address
         uint256 value = 0;
 
-        bytes memory functionData = abi.encodeWithSelector(
-            IERC20.approve.selector,
-            0x9EA9b0cc1919def1A3CfAEF4F7A66eE3c36F86fC,
-            1e18
-        );
+        bytes memory functionData =
+            abi.encodeWithSelector(IERC20.approve.selector, 0x9EA9b0cc1919def1A3CfAEF4F7A66eE3c36F86fC, 1e18);
 
-        bytes memory executeCalldata = abi.encodeWithSelector(
-            MinimalAccount.execute.selector,
-            dest,
-            value,
-            functionData
-        );
+        bytes memory executeCalldata =
+            abi.encodeWithSelector(MinimalAccount.execute.selector, dest, value, functionData);
 
         PackedUserOperation memory userOp = generateSignedUserOperation(
-            executeCalldata,
-            helperConfig.getConfig(),
-            0x03Ad95a54f02A40180D45D76789C448024145aaF
+            executeCalldata, helperConfig.getConfig(), 0x03Ad95a54f02A40180D45D76789C448024145aaF
         );
         PackedUserOperation[] memory ops = new PackedUserOperation[](1);
         ops[0] = userOp;
 
         // Send transaction
         vm.startBroadcast();
-        IEntryPoint(helperConfig.getConfig().entryPoint).handleOps(
-            ops,
-            payable(helperConfig.getConfig().account)
-        );
+        IEntryPoint(helperConfig.getConfig().entryPoint).handleOps(ops, payable(helperConfig.getConfig().account));
         vm.stopBroadcast();
     }
 
-    function generateSignedUserOperation(bytes memory callData, HelperConfig.NetworkConfig memory config,
+    function generateSignedUserOperation(
+        bytes memory callData,
+        HelperConfig.NetworkConfig memory config,
         address minimalAccount
-    )
-        public
-        returns (PackedUserOperation memory)
-    {
-        uint256 nonce = vm.getNonce(minimalAccount)-1;
+    ) public view returns (PackedUserOperation memory) {
+        uint256 nonce = vm.getNonce(minimalAccount) - 1;
         // Step 1. Generate the unsigned data
         PackedUserOperation memory userOp = _generateUnsignedUserOperation(callData, minimalAccount, nonce);
         // Step 2. Sign and return it
@@ -75,6 +64,7 @@ contract SendPackedUserOp is Script {
 
     function _generateUnsignedUserOperation(bytes memory callData, address sender, uint256 nonce)
         internal
+        pure
         returns (PackedUserOperation memory)
     {
         uint128 verificationGasLimit = 16777216;
