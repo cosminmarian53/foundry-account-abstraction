@@ -62,12 +62,19 @@ contract ZkMinimalAccount is IAccount, Ownable {
     error ZkMinimalAccount__NotEnoughBalance();
     error ZkMinimalAccount__NotFromBootLoader();
     error ZkMinimalAccount__ExecutionFailed();
+    error ZkMinimalAccount__NotFromBootLoaderOrOwner();
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
     modifier requireFromBootLoader() {
         if (msg.sender != BOOTLOADER_FORMAL_ADDRESS) {
             revert ZkMinimalAccount__NotFromBootLoader();
+        }
+        _;
+    }
+    modifier requireFromBootLoaderOrOwner() {
+        if (msg.sender != BOOTLOADER_FORMAL_ADDRESS && msg.sender != owner()) {
+            revert ZkMinimalAccount__NotFromBootLoaderOrOwner();
         }
         _;
     }
@@ -125,7 +132,7 @@ contract ZkMinimalAccount is IAccount, Ownable {
         bytes32,
         /*_txHash*/ bytes32,
         /*_suggestedSignedHash*/ Transaction memory _transaction
-    ) external payable {
+    ) external payable requireFromBootLoaderOrOwner {
         address to = address(uint160(_transaction.to));
         uint128 value = Utils.safeCastToU128(_transaction.value);
         bytes memory data = _transaction.data;
