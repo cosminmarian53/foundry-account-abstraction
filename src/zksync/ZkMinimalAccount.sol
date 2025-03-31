@@ -54,32 +54,48 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  */
 
 contract ZkMinimalAccount is IAccount, Ownable {
+    using MemoryTransactionHelper for Transaction;
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    error ZkMinimalAccount__NotEnoughBalance();
+    error ZkMinimalAccount__NotFromBootLoader();
+    error ZkMinimalAccount__ExecutionFailed();
+    /*//////////////////////////////////////////////////////////////
+                               MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+    modifier requireFromBootLoader() {
+        if (msg.sender != BOOTLOADER_FORMAL_ADDRESS) {
+            revert ZkMinimalAccount__NotFromBootLoader();
+        }
+        _;
+    }
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+
+    // msg.sender is the bootloader system contract
+    constructor() Ownable(msg.sender) {
+        // constructor code
+    }
     /**
      * @notice  must increase to nonce
      * @notice  must validate the transaction(check if owner signed the transaction)
      * @notice  check if account has enough balance to pay for the transaction
      * @dev     cosminmarian53
-     * @param   _txHash  .
-     * @param   _suggestedSignedHash  .
-     * @param   _transaction  .
-     * @return  magic  .
+     * @return  magic
      */
-    // msg.sender is the bootloader system contract
-    constructor() Ownable(msg.sender) {
-        // constructor code
-    }
+
     function validateTransaction(
-        bytes32 _txHash,
-        bytes32 _suggestedSignedHash,
-        Transaction memory _transaction
-    ) external payable returns (bytes4 magic) {
+        bytes32,
+        /*_txHash*/ bytes32,
+        /*_suggestedSignedHash*/ Transaction memory _transaction
+    ) external payable requireFromBootLoader returns (bytes4 magic) {
         // Call nonceholder
         // Increment the nonce
         SystemContractsCaller.systemCallWithPropagatedRevert(
-            uint32(gasLeft()),
+            uint32(gasleft()),
             address(NONCE_HOLDER_SYSTEM_CONTRACT),
             0,
             abi.encodeCall(
@@ -87,13 +103,59 @@ contract ZkMinimalAccount is IAccount, Ownable {
                 (_transaction.nonce)
             )
         );
+        // 1. check for fee to pay
+        uint256 totalRequiredBalance = _transaction.totalRequiredBalance();
+        if (totalRequiredBalance > address(this).balance) {
+            revert ZkMinimalAccount__NotEnoughBalance();
+        }
+        // 2. check the signature
+        bytes32 txHash = _transaction.encodeHash();
+        address signer = ECDSA.recover(txHash, _transaction.signature);
+        bool isValidSigner = signer == owner();
+        if (isValidSigner) {
+            magic = ACCOUNT_VALIDATION_SUCCESS_MAGIC;
+        } else {
+            magic = bytes4(0);
+        }
+        // 3. return the "magic" number
+        return magic;
     }
 
     function executeTransaction(
-        bytes32 _txHash,
-        bytes32 _suggestedSignedHash,
-        Transaction memory _transaction
-    ) external payable {}
+        bytes32,
+        /*_txHash*/ bytes32,
+        /*_suggestedSignedHash*/ Transaction memory _transaction
+    ) external payable {
+        address to = address(uint160(_transaction.to));
+        uint128 value = Utils.safeCastToU128(_transaction.value);
+        bytes memory data = _transaction.data;
+
+        if (to == address(DEPLOYER_SYSTEM_CONTRACT)) {
+            uint32 gas = Utils.safeCastToU32(gasleft());
+            SystemContractsCaller.systemCallWithPropagatedRevert(
+                gas,
+                to,
+                value,
+                data
+            );
+        } else {
+            bool success;
+            assembly {
+                success := call(
+                    gas(),
+                    to,
+                    value,
+                    add(data, 0x20),
+                    mload(data),
+                    0,
+                    0
+                )
+            }
+            if (!success) {
+                revert ZkMinimalAccount__ExecutionFailed();
+            }
+        }
+    }
 
     function executeTransactionFromOutside(
         Transaction memory _transaction
