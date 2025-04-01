@@ -10,6 +10,7 @@ contract ZkMinimalAccountTest is Test {
     ZkMinimalAccount minimalAccount;
     ERC20Mock usdc;
     uint256 public constant AMOUNT = 1e18;
+    bytes32 constant EMPTY_BYTES32 = bytes32(0);
     function setUp() public {
         minimalAccount = new ZkMinimalAccount();
         usdc = new ERC20Mock();
@@ -23,8 +24,25 @@ contract ZkMinimalAccountTest is Test {
             address(minimalAccount),
             AMOUNT
         );
+
+        Transaction memory transaction = _createUnsignedTransaction(
+            minimalAccount.owner(),
+            113,
+            dest,
+            value,
+            functionData
+        );
+
         // Act
+        vm.prank(minimalAccount.owner());
+        minimalAccount.executeTransaction(
+            EMPTY_BYTES32,
+            EMPTY_BYTES32,
+            transaction
+        );
+
         // Assert
+        assertEq(usdc.balanceOf(address(minimalAccount)), AMOUNT);
     }
     /*//////////////////////////////////////////////////////////////
                             HELPER FUNCTIONS
@@ -37,6 +55,25 @@ contract ZkMinimalAccountTest is Test {
         uint256 value,
         bytes memory functionData
     ) internal view returns (Transaction memory) {
-        return abi.encodePacked(dest, value, functionData);
+        uint256 nonce = vm.getNonce(address(minimalAccount));
+        return
+            Transaction({
+                txType: transactionType,
+                from: uint256(uint160(from)),
+                to: uint256(uint160(to)),
+                gasLimit: 16777216,
+                gasPerPubdataByteLimit: 16777216,
+                maxFeePerGas: 16777216,
+                maxPriorityFeePerGas: 16777216,
+                paymaster: 0,
+                nonce: nonce,
+                value: value,
+                reserved: [uint256(0), uint256(0), uint256(0), uint256(0)],
+                data: functionData,
+                signature: hex"",
+                factoryDeps: new bytes32[](0),
+                paymasterInput: hex"",
+                reservedDynamic: hex""
+            });
     }
 }
